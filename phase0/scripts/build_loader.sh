@@ -10,8 +10,8 @@
 #     referenced any more, so the linker drops it.
 #  2. UnityDataBundleDir() is patched to ask the loader first, so a game copied
 #     to Documents/Game can supply the Data folder.
-#  3. Relink and package Phase0-loader.ipa with the macOS test game's
-#     GameAssembly.dylib (retargeted to iOS) and Data bundled inside.
+#  3. Relink and package MacPadOS27.ipa with the macOS test game's
+#     GameAssembly.dylib (retargeted to iOS) and prepared Data bundled inside.
 set -euo pipefail
 ROOT=$GITHUB_WORKSPACE
 X=$ROOT/phase0/TestProject/Build/iOS
@@ -47,8 +47,12 @@ SDK=$(xcrun --sdk iphoneos --show-sdk-path)
 CC=(xcrun --sdk iphoneos clang -target arm64-apple-ios15.0 -isysroot "$SDK" -O2 -c)
 "${CC[@]}" "$F/mp27_stubs.s" -o "$F/stubs.o"
 "${CC[@]}" "$F/mp27_table.c" -o "$F/table.o"
-"${CC[@]}" -fobjc-arc "$ROOT/phase0/forwarder/mp27_loader.m" -o "$F/loader.o"
-libtool -static -o "$F/libil2cpp.a" "$F/stubs.o" "$F/table.o" "$F/loader.o"
+FW=$ROOT/phase0/forwarder
+"${CC[@]}" -fobjc-arc -I"$FW" "$FW/mp27_loader.m" -o "$F/loader.o"
+"${CC[@]}" -I"$FW" "$FW/mp27_prep.c" -o "$F/prep.o"
+libtool -static -o "$F/libil2cpp.a" "$F/stubs.o" "$F/table.o" "$F/loader.o" "$F/prep.o"
+# The same preparation code as a command-line tool, for the bundled demo below.
+clang -O2 -DMP27_PREP_MAIN -I"$FW" "$FW/mp27_prep.c" -o "$F/mp27prep"
 cp "$X/Libraries/libil2cpp.a" "$F/libil2cpp.original.a"
 cp "$F/libil2cpp.a" "$X/Libraries/libil2cpp.a"
 echo "::endgroup::"
@@ -90,29 +94,20 @@ UF=$APP/Frameworks/UnityFramework.framework/UnityFramework
 echo "UnityFramework il2cpp_* defined: $(nm -gU "$UF" | grep -c ' _il2cpp_' || true), mp27 symbols: $(nm -gU "$UF" | grep -c '_mp27_' || true)"
 
 pb() { /usr/libexec/PlistBuddy -c "$1" "$2" >/dev/null 2>&1 || true; }
-# loader_ipa <name> <bundle id> <display name> <all|metadata>
-loader_ipa() {
-  local w a p
-  w=$(mktemp -d)
-  mkdir "$w/Payload"
-  cp -R "$APP" "$w/Payload/"
-  a="$w/Payload/$(basename "$APP")"
-  p="$a/Info.plist"
-  pb "Set :CFBundleIdentifier $2" "$p"
-  pb "Delete :CFBundleDisplayName" "$p"; pb "Add :CFBundleDisplayName string $3" "$p"
-  pb "Delete :UIFileSharingEnabled" "$p"; pb "Add :UIFileSharingEnabled bool true" "$p"
-  pb "Delete :LSSupportsOpeningDocumentsInPlace" "$p"; pb "Add :LSSupportsOpeningDocumentsInPlace bool true" "$p"
-  if [ "$4" = all ]; then
-    # macOS data (scenes, assets, il2cpp_data/Metadata) on top of the iOS Data folder.
-    rsync -a --exclude boot.config "$MACAPP/Contents/Resources/Data/" "$a/Data/"
-  else
-    # iOS scenes/assets; only the macOS IL2CPP metadata, which must match the macOS code.
-    rsync -a "$MACAPP/Contents/Resources/Data/il2cpp_data" "$a/Data/"
-  fi
-  python3 "$ROOT/tools/macho_retarget.py" "$MACAPP/Contents/Frameworks/GameAssembly.dylib" "$a/Frameworks/GameAssembly.dylib"
-  codesign -f -s - "$a/Frameworks/GameAssembly.dylib"
-  (cd "$w" && zip -qry "$OUT/$1.ipa" Payload)
-  echo "packaged $1.ipa ($(du -h "$OUT/$1.ipa" | cut -f1))"
-}
-loader_ipa Phase0-loader         com.macpados27.phase0.loader  "P0 Loader"        all
-loader_ipa Phase0-loader-iosdata com.macpados27.phase0.loaderi "P0 Loader iOSData" metadata
+# The app: loader + the macOS test game bundled as a demo (prepared here, so
+# it runs without JIT: LiveContainer signs the bundled GameAssembly.dylib).
+w=$(mktemp -d)
+mkdir "$w/Payload"
+cp -R "$APP" "$w/Payload/"
+a="$w/Payload/$(basename "$APP")"
+p="$a/Info.plist"
+pb "Set :CFBundleIdentifier com.macpados27.app" "$p"
+pb "Delete :CFBundleDisplayName" "$p"; pb "Add :CFBundleDisplayName string MacPadOS27" "$p"
+pb "Delete :UIFileSharingEnabled" "$p"; pb "Add :UIFileSharingEnabled bool true" "$p"
+pb "Delete :LSSupportsOpeningDocumentsInPlace" "$p"; pb "Add :LSSupportsOpeningDocumentsInPlace bool true" "$p"
+rsync -a "$MACAPP/Contents/Resources/Data/" "$a/Data/"
+"$F/mp27prep" "$a/Data"
+python3 "$ROOT/tools/macho_retarget.py" "$MACAPP/Contents/Frameworks/GameAssembly.dylib" "$a/Frameworks/GameAssembly.dylib"
+codesign -f -s - "$a/Frameworks/GameAssembly.dylib"
+(cd "$w" && zip -qry "$OUT/MacPadOS27.ipa" Payload)
+echo "packaged MacPadOS27.ipa ($(du -h "$OUT/MacPadOS27.ipa" | cut -f1))"

@@ -17,6 +17,8 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "mp27_prep.h"
+
 // Private but stable syscall wrapper in libsystem_kernel; used to read the
 // process's code-signing flags. CS_DEBUGGED is set once a debugger (StikDebug)
 // has attached, which is what "JIT enabled" means on stock iPadOS.
@@ -108,12 +110,55 @@ static NSString *retarget_to_tmp(NSString *src)
         } else if (cmd == 0x24) { // LC_VERSION_MIN_MACOSX -> LC_VERSION_MIN_IPHONEOS
             wr32le(m + off, 0x25);
             wr32le(m + off + 8, 15 << 16);
+        } else if (cmd == 0xC || cmd == 0x80000018 || cmd == 0x8000001F || cmd == 0x80000023) {
+            // macOS framework install names have a Versions/X/ level that iOS lacks:
+            // /System/Library/Frameworks/F.framework/Versions/C/F -> .../F.framework/F
+            char *name = (char *)m + off + rd32le(m + off + 8);
+            char *ver = strstr(name, ".framework/Versions/");
+            if (ver) {
+                char *leaf = strchr(ver + 20, '/');
+                if (leaf) {
+                    size_t keep = (ver + 11) - name, avail = size - rd32le(m + off + 8);
+                    char fixed[512];
+                    snprintf(fixed, sizeof fixed, "%.*s%s", (int)keep, name, leaf + 1);
+                    mp27_log("dylib %s -> %s", name, fixed);
+                    memset(name, 0, avail);
+                    memcpy(name, fixed, strlen(fixed));
+                }
+            }
         }
         off += size;
     }
     NSString *dst = [NSTemporaryDirectory() stringByAppendingPathComponent:@"GameAssembly-ios.dylib"];
     if (![out writeToFile:dst atomically:YES]) { mp27_log("cannot write %s", dst.UTF8String); return nil; }
     return dst;
+}
+
+// ---- preparing a macOS game's Data folder for the iOS player ----
+
+static void copy_if_missing(NSString *from, NSString *to)
+{
+    NSFileManager *fm = [NSFileManager defaultManager];
+    if ([fm fileExistsAtPath:to] || ![fm fileExistsAtPath:from]) return;
+    [fm createDirectoryAtPath:to.stringByDeletingLastPathComponent withIntermediateDirectories:YES attributes:nil error:nil];
+    NSError *err = nil;
+    if ([fm copyItemAtPath:from toPath:to error:&err]) mp27_log("added %s", to.lastPathComponent.UTF8String);
+    else mp27_log("could not add %s: %s", to.lastPathComponent.UTF8String, err.localizedDescription.UTF8String);
+}
+
+static void prepare_game_data(NSString *data, NSString *bundle)
+{
+    // iOS-only files the iOS engine expects inside Data (macOS keeps its own
+    // "unity default resources" outside Data, built for macOS).
+    NSString *shellData = [bundle stringByAppendingPathComponent:@"Data"];
+    copy_if_missing([shellData stringByAppendingPathComponent:@"unity default resources"],
+                    [data stringByAppendingPathComponent:@"unity default resources"]);
+    copy_if_missing([shellData stringByAppendingPathComponent:@"Managed/mono"],
+                    [data stringByAppendingPathComponent:@"Managed/mono"]);
+    NSDate *t0 = [NSDate date];
+    mp27_prep_stats st;
+    int rc = mp27_prepare_data(data.UTF8String, mp27_log, &st);
+    mp27_log("data preparation %s in %.1f s", rc == 0 ? "ok" : "FAILED", -t0.timeIntervalSinceNow);
 }
 
 // ---- locating the game ----
@@ -160,6 +205,7 @@ __attribute__((constructor)) static void mp27_init(void)
             if ([[NSFileManager defaultManager] fileExistsAtPath:[resources stringByAppendingPathComponent:@"Data/globalgamemanagers"]]) {
                 strlcpy(g_data_bundle, resources.UTF8String, sizeof g_data_bundle);
                 mp27_log("data bundle dir: %s", g_data_bundle);
+                prepare_game_data([resources stringByAppendingPathComponent:@"Data"], bundle);
             } else {
                 mp27_log("no Data/globalgamemanagers next to it; using the app's bundled data");
             }

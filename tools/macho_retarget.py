@@ -13,6 +13,8 @@ import argparse
 import struct
 import sys
 
+LC_REQ_DYLD = 0x80000000
+DYLIB_CMDS = {0xC, 0x18 | LC_REQ_DYLD, 0x1F | LC_REQ_DYLD, 0x20, 0x23 | LC_REQ_DYLD}
 LC_BUILD_VERSION = 0x32
 LC_VERSION_MIN_MACOSX = 0x24
 LC_VERSION_MIN_IPHONEOS = 0x25
@@ -45,6 +47,13 @@ def arm64_slice(data):
     raise SystemExit("not a Mach-O file")
 
 
+def ios_install_name(path):
+    """macOS framework paths have a Versions/<X>/ level that iOS frameworks lack."""
+    import re
+    m = re.match(r"^(/System/Library/(?:Private)?Frameworks/([^/]+)\.framework/)Versions/[^/]+/\2$", path)
+    return m.group(1) + m.group(2) if m else path
+
+
 def retarget(buf, minos, sdk):
     """Patch in place. Returns a list of human-readable changes."""
     ncmds, sizeofcmds = struct.unpack_from("<II", buf, 16)
@@ -55,6 +64,14 @@ def retarget(buf, minos, sdk):
             plat, old_min, old_sdk = struct.unpack_from("<III", buf, p + 8)
             struct.pack_into("<III", buf, p + 8, PLATFORM_IOS, minos, sdk)
             changes.append(f"LC_BUILD_VERSION platform {plat}->{PLATFORM_IOS}, minos {old_min:#x}->{minos:#x}, sdk {old_sdk:#x}->{sdk:#x}")
+        elif cmd in DYLIB_CMDS:
+            name_off = struct.unpack_from("<I", buf, p + 8)[0]
+            raw = bytes(buf[p + name_off:p + size])
+            old = raw.split(b"\0", 1)[0].decode()
+            new = ios_install_name(old)
+            if new != old:  # always shorter, so it fits in place
+                buf[p + name_off:p + size] = new.encode().ljust(size - name_off, b"\0")
+                changes.append(f"dylib {old} -> {new}")
         elif cmd == LC_VERSION_MIN_MACOSX:
             struct.pack_into("<IIII", buf, p, LC_VERSION_MIN_IPHONEOS, size, minos, sdk)
             changes.append("LC_VERSION_MIN_MACOSX -> LC_VERSION_MIN_IPHONEOS")
