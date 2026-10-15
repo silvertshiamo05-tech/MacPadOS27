@@ -7,3 +7,11 @@ symbol-check/
 *.zip
 global-metadata.dat
 globalgamemanagers
+# Unity test project
+phase0/TestProject/Library/
+phase0/TestProject/Temp/
+phase0/TestProject/Logs/
+phase0/TestProject/UserSettings/
+phase0/TestProject/Build/
+phase0/TestProject/obj/
+out/

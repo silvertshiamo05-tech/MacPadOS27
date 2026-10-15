@@ -1,0 +1,95 @@
+name: phase0
+
+# Builds the Phase 0 test project with the game's exact Unity version for
+# macOS (IL2CPP arm64) and iOS, packages unsigned IPAs for LiveContainer and
+# publishes them as a GitHub pre-release. See docs/ARCHITECTURE.md, Phase 0.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["phase0/**", ".github/workflows/phase0.yml"]
+
+concurrency:
+  group: phase0
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+env:
+  UNITY_VERSION: "2022.3.62f2"
+  UNITY_CHANGESET: "7670c08855a9"
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Unity project Library
+        uses: actions/cache@v4
+        with:
+          path: phase0/TestProject/Library
+          key: phase0-library-${{ env.UNITY_VERSION }}-${{ hashFiles('phase0/TestProject/Packages/manifest.json', 'phase0/TestProject/Assets/**') }}
+          restore-keys: phase0-library-${{ env.UNITY_VERSION }}-
+
+      - name: Install Unity ${{ env.UNITY_VERSION }}
+        id: unity
+        uses: RageAgainstThePixel/unity-setup@v2.6.0
+        with:
+          unity-version: "${{ env.UNITY_VERSION }} (${{ env.UNITY_CHANGESET }})"
+          modules: "ios mac-il2cpp"
+          architecture: arm64
+          cache-installation: true
+
+      - name: Activate Unity Personal license
+        uses: RageAgainstThePixel/activate-unity-license@v2.2.2
+        with:
+          license: personal
+          username: ${{ secrets.UNITY_EMAIL }}
+          password: ${{ secrets.UNITY_PASSWORD }}
+
+      - name: Locate editor
+        run: |
+          p="${{ steps.unity.outputs.unity-editor-path }}"
+          case "$p" in *.app) p="$p/Contents/MacOS/Unity" ;; esac
+          if [ ! -x "$p" ]; then
+            p=$(ls -d /Applications/Unity/Hub/Editor/$UNITY_VERSION*/Unity.app/Contents/MacOS/Unity 2>/dev/null | head -1)
+          fi
+          echo "editor: $p"
+          test -x "$p"
+          echo "UNITY=$p" >> "$GITHUB_ENV"
+
+      - name: Build macOS test game (IL2CPP, arm64)
+        run: phase0/scripts/unity_build.sh StandaloneOSX Phase0Build.BuildMac
+
+      - name: Export iOS Xcode project
+        run: phase0/scripts/unity_build.sh iOS Phase0Build.BuildIOS
+
+      - name: Compile iOS app and package IPAs
+        run: phase0/scripts/package_ios.sh
+
+      - name: Diagnostics
+        if: always()
+        run: phase0/scripts/diagnostics.sh
+
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase0-diagnostics
+          path: out/diagnostics.zip
+          if-no-files-found: ignore
+
+      - name: Publish pre-release
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          shopt -s nullglob
+          files=(out/*.ipa out/*.zip)
+          [ ${#files[@]} -gt 0 ] || { echo "nothing to publish"; exit 0; }
+          title="Phase 0 build ${{ github.run_number }} (${{ job.status }})"
+          gh release create "phase0-r${{ github.run_number }}" "${files[@]}" \
+            --prerelease --target "${{ github.sha }}" --title "$title" --notes-file phase0/RELEASE.md
