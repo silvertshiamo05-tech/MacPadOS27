@@ -15,6 +15,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+
+// Private but stable syscall wrapper in libsystem_kernel; used to read the
+// process's code-signing flags. CS_DEBUGGED is set once a debugger (StikDebug)
+// has attached, which is what "JIT enabled" means on stock iPadOS.
+extern int csops(pid_t pid, unsigned int ops, void *useraddr, size_t usersize);
+#define CS_OPS_STATUS 0
+#define CS_DEBUGGED 0x10000000
 
 extern const unsigned mp27_count;
 extern void *mp27_table[];
@@ -137,6 +145,9 @@ __attribute__((constructor)) static void mp27_init(void)
         NSString *docs = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
         g_log = fopen([docs stringByAppendingPathComponent:@"mp27-loader.log"].UTF8String, "w");
         mp27_log("MacPadOS27 loader, %u forwarded symbols", mp27_count);
+        uint32_t csflags = 0;
+        csops(getpid(), CS_OPS_STATUS, &csflags, sizeof csflags);
+        mp27_log("JIT (CS_DEBUGGED): %s, cs flags 0x%08x", (csflags & CS_DEBUGGED) ? "YES" : "no", csflags);
 
         NSString *bundle = [NSBundle mainBundle].bundlePath;
         NSString *dylib = nil, *path = find_in_documents(docs);
@@ -160,6 +171,15 @@ __attribute__((constructor)) static void mp27_init(void)
         }
         if (dylib) {
             g_handle = dlopen(dylib.UTF8String, RTLD_NOW | RTLD_LOCAL);
+            if (!g_handle) mp27_log("dlopen failed: %s", dlerror());
+        }
+        NSString *bundled = [bundle stringByAppendingPathComponent:@"Frameworks/GameAssembly.dylib"];
+        if (!g_handle && path && [[NSFileManager defaultManager] fileExistsAtPath:bundled]) {
+            mp27_log("falling back to the bundled GameAssembly.dylib and bundled data");
+            g_data_bundle[0] = 0;
+            g_metadata_dir[0] = 0;
+            remember_metadata_dir([bundle stringByAppendingPathComponent:@"Data/il2cpp_data"]);
+            g_handle = dlopen(bundled.UTF8String, RTLD_NOW | RTLD_LOCAL);
             if (!g_handle) mp27_log("dlopen failed: %s", dlerror());
         }
 

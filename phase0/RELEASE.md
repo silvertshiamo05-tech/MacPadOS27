@@ -16,5 +16,9 @@ Files → On My iPad → LiveContainer → Data → Application → (the app's f
 | 6 | `P0-5-resources.ipa` | Only the macOS resources.assets |
 | – | `Phase0-native.ipa`, `Phase0-macdata.ipa`, `Phase0-loader.ipa` | Same as before, now with logs |
 
+**Documents test (P0 Loader only, needs JIT):** put `Phase0Test.app` (from `Phase0Test-mac.zip`) into P0 Loader's
+Documents → Game folder and launch P0 Loader **with JIT**. The 2nd line of `mp27-loader.log` must say `JIT (CS_DEBUGGED): YES`,
+otherwise JIT did not attach and iPadOS will refuse the patched dylib (`code signature invalid`).
+
 For each: **runs** (picture shows) or **crashes**. For every crash, send the end of its `unity-player.log`
 (the last ~30 lines, screenshot is fine). For #2 also send `mp27-loader.log`.
