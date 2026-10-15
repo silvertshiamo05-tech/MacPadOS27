@@ -24,6 +24,15 @@ static FILE *g_log;
 static void *g_handle;
 static char g_metadata_dir[1024];
 static int g_data_dir_set;
+static char g_data_bundle[1024];
+
+// Called by the patched UnityDataBundleDir() in Classes/Unity/Filesystem.mm.
+// Unity reads its "Data" folder from <this dir>/Data, so for a macOS
+// Game.app copied to Documents/Game this is <Game.app>/Contents/Resources.
+const char *mp27_data_bundle_dir(void)
+{
+    return g_data_bundle[0] ? g_data_bundle : NULL;
+}
 
 static void mp27_log(const char *fmt, ...)
 {
@@ -36,11 +45,16 @@ static void mp27_log(const char *fmt, ...)
     if (g_log) { fprintf(g_log, "%s\n", buf); fflush(g_log); }
 }
 
+__attribute__((noreturn)) static void mp27_unresolved(void);
+
 static void *mp27_real(const char *name)
 {
     for (unsigned i = 0; i < mp27_count; i++)
         if (strcmp(mp27_names[i], name) == 0) return mp27_table[i];
-    return NULL;
+    // Not something the engine forwards (e.g. set_data_dir); look it up directly.
+    void *p = g_handle ? dlsym(g_handle, name) : NULL;
+    if (!p) mp27_log("mp27_real: %s not found", name);
+    return p ? p : (void *)mp27_unresolved;
 }
 
 __attribute__((noreturn)) static void mp27_unresolved(void)
@@ -99,6 +113,8 @@ static NSString *retarget_to_tmp(NSString *src)
 static NSString *find_in_documents(NSString *docs)
 {
     NSString *root = [docs stringByAppendingPathComponent:@"Game"];
+    // Create the folder so it shows up in the Files app, ready for a game.
+    [[NSFileManager defaultManager] createDirectoryAtPath:root withIntermediateDirectories:YES attributes:nil error:nil];
     NSDirectoryEnumerator *en = [[NSFileManager defaultManager] enumeratorAtPath:root];
     for (NSString *rel in en)
         if ([rel.lastPathComponent isEqualToString:@"GameAssembly.dylib"])
@@ -129,6 +145,13 @@ __attribute__((constructor)) static void mp27_init(void)
             // <Game.app>/Contents/Frameworks/GameAssembly.dylib -> <Game.app>/Contents/Resources/Data/il2cpp_data
             NSString *contents = path.stringByDeletingLastPathComponent.stringByDeletingLastPathComponent;
             remember_metadata_dir([contents stringByAppendingPathComponent:@"Resources/Data/il2cpp_data"]);
+            NSString *resources = [contents stringByAppendingPathComponent:@"Resources"];
+            if ([[NSFileManager defaultManager] fileExistsAtPath:[resources stringByAppendingPathComponent:@"Data/globalgamemanagers"]]) {
+                strlcpy(g_data_bundle, resources.UTF8String, sizeof g_data_bundle);
+                mp27_log("data bundle dir: %s", g_data_bundle);
+            } else {
+                mp27_log("no Data/globalgamemanagers next to it; using the app's bundled data");
+            }
             dylib = retarget_to_tmp(path);
         } else {
             dylib = [bundle stringByAppendingPathComponent:@"Frameworks/GameAssembly.dylib"];

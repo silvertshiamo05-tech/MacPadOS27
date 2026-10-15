@@ -70,6 +70,11 @@ jobs:
       - name: Compile iOS app and package IPAs
         run: phase0/scripts/package_ios.sh
 
+      - name: Build loader IPA (forwarder + macOS GameAssembly)
+        # The E1 IPAs above are still published if this experimental step fails.
+        continue-on-error: true
+        run: phase0/scripts/build_loader.sh
+
       - name: Diagnostics
         if: always()
         run: phase0/scripts/diagnostics.sh
