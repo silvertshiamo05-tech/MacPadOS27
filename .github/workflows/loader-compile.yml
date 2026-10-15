@@ -1,0 +1,31 @@
+name: loader-compile
+
+# Fast check (about a minute) that the loader sources compile for iOS, so a
+# typo does not cost a full 45-minute Unity build.
+on:
+  push:
+    paths: ["phase0/forwarder/**", ".github/workflows/loader-compile.yml"]
+  workflow_dispatch:
+
+jobs:
+  compile:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile loader and data preparation for arm64 iOS
+        run: |
+          set -e
+          SDK=$(xcrun --sdk iphoneos --show-sdk-path)
+          FW=phase0/forwarder
+          CC="xcrun --sdk iphoneos clang -target arm64-apple-ios15.0 -isysroot $SDK -O2 -Wall -c -I$FW"
+          $CC -fobjc-arc $FW/mp27_loader.m -o /tmp/loader.o
+          $CC $FW/mp27_prep.c -o /tmp/prep.o
+          echo "_il2cpp_init" > /tmp/syms.txt; echo "_il2cpp_class_get_methods" >> /tmp/syms.txt; echo "_il2cpp_array_new" >> /tmp/syms.txt
+          python3 $FW/gen_forwarder.py /tmp/syms.txt /tmp/fwd
+          $CC /tmp/fwd/mp27_stubs.s -o /tmp/stubs.o
+          $CC /tmp/fwd/mp27_table.c -o /tmp/table.o
+          xcrun --sdk iphoneos clang -target arm64-apple-ios15.0 -isysroot $SDK -dynamiclib -framework Foundation \
+            /tmp/loader.o /tmp/prep.o /tmp/stubs.o /tmp/table.o -o /tmp/libtest.dylib -Wl,-undefined,error
+          echo "loader links: OK"
+      - name: Host build of mp27prep
+        run: clang -O2 -Wall -DMP27_PREP_MAIN -Iphase0/forwarder phase0/forwarder/mp27_prep.c -o /tmp/mp27prep

@@ -21,7 +21,8 @@ import os
 import re
 import sys
 
-DEFAULT_OVERRIDES = ["il2cpp_init", "il2cpp_init_utf16", "il2cpp_set_data_dir"]
+DEFAULT_OVERRIDES = ["il2cpp_init", "il2cpp_init_utf16", "il2cpp_set_data_dir",
+                     "il2cpp_class_get_methods"]
 
 
 def main(argv=None):
