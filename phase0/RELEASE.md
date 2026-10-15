@@ -1,17 +1,20 @@
 Phase 0 test build. Contains only the MacPadOS27 test project, no game files.
 
-**Install on the iPad (Safari):** tap an `.ipa` below → Download → in LiveContainer tap **+** and pick it from Files → Downloads.
+**Install on the iPad (Safari):** tap an `.ipa` below → Download → in LiveContainer tap **+** and pick it from Files → Downloads. No JIT needed unless noted.
 
-| File | What it tests | Expected |
+Every app now writes `unity-player.log` (Unity's console output and any crash) to its Documents folder:
+Files → On My iPad → LiveContainer → Data → Application → (the app's folder) → Documents.
+
+### Test in this order
+| # | File | What it tests |
 |---|---|---|
-| `Phase0-native.ipa` | Control: the test project built normally for iOS | Spinning cube, orange/blue checker, report text |
-| `Phase0-macdata.ipa` | iOS engine loading scene/asset files **built for macOS** | Same picture; 2nd line says `data built for StandaloneOSX` |
-| `Phase0-loader.ipa` | The real loader: iOS engine running the **macOS GameAssembly.dylib** (bundled, pre-patched) + macOS data | Same picture; 2nd line says `data built for StandaloneOSX` |
-| `Phase0Test-mac.zip` | The macOS build of the test game, for the Documents test below | |
+| 1 | `P0-1-platform.ipa` | All macOS data, with each file's "built for" field changed from macOS to iOS |
+| 2 | `Phase0-loader-iosdata.ipa` | **The forwarder**: the macOS game code (GameAssembly.dylib) on the iOS engine, iOS data |
+| 3 | `P0-2-managers.ipa` | Only the macOS project settings files (globalgamemanagers) |
+| 4 | `P0-3-scene.ipa` | Only the macOS scene + its texture/material (level0, sharedassets0) |
+| 5 | `P0-4-shaders.ipa` | Only the macOS built-in shaders (unity_builtin_extra) |
+| 6 | `P0-5-resources.ipa` | Only the macOS resources.assets |
+| – | `Phase0-native.ipa`, `Phase0-macdata.ipa`, `Phase0-loader.ipa` | Same as before, now with logs |
 
-**Documents test (loader only, needs JIT):** unzip `Phase0Test-mac.zip` in Files, then move `Phase0Test.app` into
-Files → On My iPad → LiveContainer → Data → Application → (P0 Loader's folder) → Documents → **Game**
-(the folder appears after the first launch). Launch P0 Loader with JIT enabled in StikDebug.
-
-Send back for each app: a screenshot (or what the screen shows), and if it crashes, when.
-Logs to send from that app's Documents folder: `phase0.log` and, for the loader, `mp27-loader.log`.
+For each: **runs** (picture shows) or **crashes**. For every crash, send the end of its `unity-player.log`
+(the last ~30 lines, screenshot is fine). For #2 also send `mp27-loader.log`.

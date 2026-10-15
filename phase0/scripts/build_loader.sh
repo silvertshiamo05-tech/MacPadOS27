@@ -90,18 +90,29 @@ UF=$APP/Frameworks/UnityFramework.framework/UnityFramework
 echo "UnityFramework il2cpp_* defined: $(nm -gU "$UF" | grep -c ' _il2cpp_' || true), mp27 symbols: $(nm -gU "$UF" | grep -c '_mp27_' || true)"
 
 pb() { /usr/libexec/PlistBuddy -c "$1" "$2" >/dev/null 2>&1 || true; }
-w=$(mktemp -d)
-mkdir "$w/Payload"
-cp -R "$APP" "$w/Payload/"
-a="$w/Payload/$(basename "$APP")"
-p="$a/Info.plist"
-pb "Set :CFBundleIdentifier com.macpados27.phase0.loader" "$p"
-pb "Delete :CFBundleDisplayName" "$p"; pb "Add :CFBundleDisplayName string P0 Loader" "$p"
-pb "Delete :UIFileSharingEnabled" "$p"; pb "Add :UIFileSharingEnabled bool true" "$p"
-pb "Delete :LSSupportsOpeningDocumentsInPlace" "$p"; pb "Add :LSSupportsOpeningDocumentsInPlace bool true" "$p"
-# macOS data (scenes, assets, il2cpp_data/Metadata) on top of the iOS Data folder.
-rsync -a --exclude boot.config "$MACAPP/Contents/Resources/Data/" "$a/Data/"
-python3 "$ROOT/tools/macho_retarget.py" "$MACAPP/Contents/Frameworks/GameAssembly.dylib" "$a/Frameworks/GameAssembly.dylib"
-codesign -f -s - "$a/Frameworks/GameAssembly.dylib"
-(cd "$w" && zip -qry "$OUT/Phase0-loader.ipa" Payload)
-echo "packaged Phase0-loader.ipa ($(du -h "$OUT/Phase0-loader.ipa" | cut -f1))"
+# loader_ipa <name> <bundle id> <display name> <all|metadata>
+loader_ipa() {
+  local w a p
+  w=$(mktemp -d)
+  mkdir "$w/Payload"
+  cp -R "$APP" "$w/Payload/"
+  a="$w/Payload/$(basename "$APP")"
+  p="$a/Info.plist"
+  pb "Set :CFBundleIdentifier $2" "$p"
+  pb "Delete :CFBundleDisplayName" "$p"; pb "Add :CFBundleDisplayName string $3" "$p"
+  pb "Delete :UIFileSharingEnabled" "$p"; pb "Add :UIFileSharingEnabled bool true" "$p"
+  pb "Delete :LSSupportsOpeningDocumentsInPlace" "$p"; pb "Add :LSSupportsOpeningDocumentsInPlace bool true" "$p"
+  if [ "$4" = all ]; then
+    # macOS data (scenes, assets, il2cpp_data/Metadata) on top of the iOS Data folder.
+    rsync -a --exclude boot.config "$MACAPP/Contents/Resources/Data/" "$a/Data/"
+  else
+    # iOS scenes/assets; only the macOS IL2CPP metadata, which must match the macOS code.
+    rsync -a "$MACAPP/Contents/Resources/Data/il2cpp_data" "$a/Data/"
+  fi
+  python3 "$ROOT/tools/macho_retarget.py" "$MACAPP/Contents/Frameworks/GameAssembly.dylib" "$a/Frameworks/GameAssembly.dylib"
+  codesign -f -s - "$a/Frameworks/GameAssembly.dylib"
+  (cd "$w" && zip -qry "$OUT/$1.ipa" Payload)
+  echo "packaged $1.ipa ($(du -h "$OUT/$1.ipa" | cut -f1))"
+}
+loader_ipa Phase0-loader         com.macpados27.phase0.loader  "P0 Loader"        all
+loader_ipa Phase0-loader-iosdata com.macpados27.phase0.loaderi "P0 Loader iOSData" metadata
