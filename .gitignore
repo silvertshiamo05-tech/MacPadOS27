@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+symbol-check/
+# Never commit game files
+*.app/
+*.dylib
+*.zip
+global-metadata.dat
+globalgamemanagers

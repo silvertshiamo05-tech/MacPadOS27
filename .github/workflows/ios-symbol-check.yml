@@ -1,0 +1,30 @@
+name: ios-symbol-check
+
+# Upload an inspector report to reports/ (github.com -> Add file -> Upload files)
+# and this runs automatically. Or run it by hand from the Actions tab.
+on:
+  push:
+    paths: ["reports/*.json"]
+  workflow_dispatch:
+    inputs:
+      min_ios:
+        description: "Minimum iPadOS version to link against"
+        default: "16.0"
+
+jobs:
+  check:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Link GameAssembly imports against the iPadOS SDK
+        run: |
+          shopt -s nullglob
+          reports=(reports/*.json)
+          if [ ${#reports[@]} -eq 0 ]; then echo "No reports in reports/"; exit 0; fi
+          python3 ci/ios_symbol_check.py "${reports[@]}" --min-ios "${{ inputs.min_ios || '16.0' }}" --out symbol-check
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-symbol-check
+          path: symbol-check/summary.md
+          if-no-files-found: ignore

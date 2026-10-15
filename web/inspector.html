@@ -1,0 +1,711 @@
+<title>MacPadOS27 Build Inspector</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one narrow instrument column - intake panel, summary readout, findings log, raw report. */
+:root {
+  --bg: #eef0f3;
+  --panel: #ffffff;
+  --ink: #161b24;
+  --muted: #5a6474;
+  --line: #d5dae2;
+  --accent: #2448c9;
+  --accent-ink: #ffffff;
+  --ok: #1d7a46;
+  --info: #4a5b78;
+  --warn: #a2620a;
+  --stop: #b3261e;
+  --chip-ok: #e1f3e8;
+  --chip-info: #e6eaf2;
+  --chip-warn: #fbefd9;
+  --chip-stop: #fbe3e1;
+  --code-bg: #f5f6f9;
+  --display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f131a; --panel: #171c25; --ink: #e6e9ef; --muted: #98a2b3; --line: #2a3140;
+    --accent: #7d9bff; --accent-ink: #0b1020;
+    --ok: #5cc98a; --info: #9fb0cc; --warn: #f0b24c; --stop: #ff8a80;
+    --chip-ok: #15301f; --chip-info: #1e2533; --chip-warn: #33270f; --chip-stop: #3a1714;
+    --code-bg: #11161e;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f131a; --panel: #171c25; --ink: #e6e9ef; --muted: #98a2b3; --line: #2a3140;
+  --accent: #7d9bff; --accent-ink: #0b1020;
+  --ok: #5cc98a; --info: #9fb0cc; --warn: #f0b24c; --stop: #ff8a80;
+  --chip-ok: #15301f; --chip-info: #1e2533; --chip-warn: #33270f; --chip-stop: #3a1714;
+  --code-bg: #11161e;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 48px;
+}
+main { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+h1, h2 { font-family: var(--display); text-wrap: balance; margin: 0; letter-spacing: -0.01em; }
+h1 { font-size: 1.75rem; font-weight: 800; }
+h2 { font-size: 1.05rem; font-weight: 700; }
+p { margin: 0; max-width: 65ch; }
+.eyebrow { font-family: var(--mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+header { display: flex; flex-direction: column; gap: 8px; }
+.lede { color: var(--muted); }
+section.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.pickers { display: flex; flex-wrap: wrap; gap: 10px; }
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 0 16px;
+  border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+  font: 600 0.95rem var(--body); cursor: pointer;
+}
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.btn input { display: none; }
+.hint { font-size: 0.86rem; color: var(--muted); }
+.paths { font-family: var(--mono); font-size: 0.8rem; background: var(--code-bg); border-radius: 6px; padding: 10px 12px; overflow-x: auto; white-space: pre; }
+.status { font-family: var(--mono); font-size: 0.85rem; color: var(--muted); min-height: 1.2em; }
+.example-tag { align-self: flex-start; font-family: var(--mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; padding: 2px 8px; border-radius: 999px; background: var(--chip-info); color: var(--info); }
+.readout { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.readout div { background: var(--panel); padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.readout dt { font-family: var(--mono); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.readout dd { margin: 0; font-family: var(--mono); font-size: 0.95rem; font-weight: 500; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.verdict { padding: 12px 14px; border-radius: 8px; font-weight: 600; }
+.verdict.go { background: var(--chip-ok); color: var(--ok); }
+.verdict.stop { background: var(--chip-stop); color: var(--stop); }
+ul.findings { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+ul.findings li { display: grid; grid-template-columns: 74px 1fr; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); align-items: start; }
+ul.findings li:first-child { border-top: 0; }
+ul.findings li span:last-child { min-width: 0; overflow-wrap: anywhere; }
+.chip { font-family: var(--mono); font-size: 0.7rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em; text-align: center; padding: 3px 0; border-radius: 4px; }
+.chip.ok { background: var(--chip-ok); color: var(--ok); }
+.chip.info { background: var(--chip-info); color: var(--info); }
+.chip.warn { background: var(--chip-warn); color: var(--warn); }
+.chip.blocker { background: var(--chip-stop); color: var(--stop); }
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-family: var(--mono); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 500; }
+td.mono { font-family: var(--mono); font-size: 0.8rem; word-break: break-all; }
+td.num { font-variant-numeric: tabular-nums; text-align: right; }
+textarea { width: 100%; min-height: 160px; font-family: var(--mono); font-size: 0.75rem; background: var(--code-bg); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 10px; resize: vertical; }
+ol.steps { margin: 0; padding-left: 1.3em; display: flex; flex-direction: column; gap: 4px; max-width: 65ch; }
+code { font-family: var(--mono); font-size: 0.85em; background: var(--code-bg); padding: 1px 4px; border-radius: 3px; overflow-wrap: anywhere; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+@media (prefers-reduced-motion: no-preference) { .btn { transition: filter .15s; } .btn:hover { filter: brightness(1.06); } }
+</style>
+
+<main>
+  <header>
+    <span class="eyebrow">MacPadOS27 · step 1</span>
+    <h1>Build Inspector</h1>
+    <p class="lede">Checks a Unity macOS game for the iPad loader: Unity version, IL2CPP vs Mono, whether <code>GameAssembly.dylib</code> has an arm64 slice, what it links, and native plugins. Files are read on this phone and never uploaded.</p>
+  </header>
+
+  <section class="panel" aria-labelledby="pick-h">
+    <h2 id="pick-h">Choose the game files</h2>
+    <p class="hint">Pick a <b>.zip</b> of the game's <code>.app</code>, or pick these files directly from inside <code>Game.app/Contents/</code>:</p>
+    <div class="paths">Frameworks/GameAssembly.dylib
+Resources/Data/il2cpp_data/Metadata/global-metadata.dat
+Resources/Data/globalgamemanagers
+Info.plist
+PlugIns/*.bundle/Contents/MacOS/*   (optional)</div>
+    <div class="pickers">
+      <label class="btn primary" for="pick-zip">Choose .zip<input id="pick-zip" type="file" accept=".zip,application/zip"></label>
+      <label class="btn" for="pick-files">Choose files<input id="pick-files" type="file" multiple></label>
+      <label class="btn" for="pick-dir">Choose folder<input id="pick-dir" type="file" webkitdirectory multiple></label>
+    </div>
+    <div class="status" id="status" role="status" aria-live="polite"></div>
+  </section>
+
+  <section class="panel" aria-labelledby="res-h" id="results">
+    <span class="example-tag" id="example-tag">Example: synthetic build, not your game</span>
+    <h2 id="res-h">Summary</h2>
+    <dl class="readout" id="readout"></dl>
+    <div class="verdict" id="verdict"></div>
+    <h2>Findings</h2>
+    <ul class="findings" id="findings"></ul>
+    <h2>What GameAssembly.dylib links (arm64)</h2>
+    <div class="tablewrap"><table><thead><tr><th>Library</th><th>Link</th><th>Symbols</th></tr></thead><tbody id="libs"></tbody></table></div>
+  </section>
+
+  <section class="panel" aria-labelledby="rep-h">
+    <h2 id="rep-h">Send the report to the build repo</h2>
+    <p class="hint">The report holds names and versions only (no game code or assets). The iPadOS symbol check on GitHub reads it.</p>
+    <ol class="steps">
+      <li>Tap <b>Copy report</b>.</li>
+      <li>In the repo on github.com: <b>Add file → Create new file</b>, name it <code>reports/&lt;game&gt;.json</code>, paste, commit.</li>
+      <li>Open the <b>Actions</b> tab: the <b>ios-symbol-check</b> run lists any symbol the iPad lacks.</li>
+    </ol>
+    <div class="row">
+      <button class="btn primary" id="copy" type="button">Copy report</button>
+      <button class="btn" id="download" type="button">Download .json</button>
+      <span class="status" id="copy-status"></span>
+    </div>
+    <textarea id="json" readonly aria-label="Report JSON"></textarea>
+  </section>
+</main>
+
+<script id="core">
+/* Inspector core. Mirrors tools/unity_inspect.py; keep the two in step.
+   No DOM use here, so tests/web_inspector.test.mjs can run it under Node. */
+var InspectorCore = (function () {
+  "use strict";
+  var SCHEMA = 1;
+  var utf8 = new TextDecoder("utf-8");
+
+  function dv(u8) { return new DataView(u8.buffer, u8.byteOffset, u8.byteLength); }
+  function cstr(u8, at) {
+    var end = u8.indexOf(0, at); if (end < 0) end = u8.length;
+    return utf8.decode(u8.subarray(at, end));
+  }
+
+  /* ---------- sources: entries are {path, size, read(off, len) -> Promise<Uint8Array>} ---------- */
+  function blobEntry(path, blob) {
+    return { path: path, size: blob.size, read: function (off, len) {
+      return blob.slice(off, off + len).arrayBuffer().then(function (b) { return new Uint8Array(b); });
+    } };
+  }
+  function filesToEntries(files) {
+    return Array.prototype.map.call(files, function (f) { return blobEntry(f.webkitRelativePath || f.name, f); });
+  }
+
+  async function zipEntries(blob) {
+    var size = blob.size;
+    async function rd(off, len) { return new Uint8Array(await blob.slice(off, off + len).arrayBuffer()); }
+    var tailLen = Math.min(size, 65557 + 22);
+    var tail = await rd(size - tailLen, tailLen), tv = dv(tail), eocd = -1;
+    for (var i = tail.length - 22; i >= 0; i--) if (tv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+    if (eocd < 0) throw new Error("Not a zip file (no end-of-central-directory record).");
+    var count = tv.getUint16(eocd + 10, true), cdSize = tv.getUint32(eocd + 12, true), cdOff = tv.getUint32(eocd + 16, true);
+    if (count === 0xFFFF || cdSize === 0xFFFFFFFF || cdOff === 0xFFFFFFFF) {
+      var loc = eocd - 20;
+      if (loc < 0 || tv.getUint32(loc, true) !== 0x07064b50) throw new Error("Broken zip64 archive.");
+      var z64 = await rd(Number(tv.getBigUint64(loc + 8, true)), 56), zv = dv(z64);
+      count = Number(zv.getBigUint64(32, true)); cdSize = Number(zv.getBigUint64(40, true)); cdOff = Number(zv.getBigUint64(48, true));
+    }
+    var cd = await rd(cdOff, cdSize), cv = dv(cd), p = 0, out = [];
+    for (var n = 0; n < count && p + 46 <= cd.length; n++) {
+      if (cv.getUint32(p, true) !== 0x02014b50) break;
+      var flags = cv.getUint16(p + 8, true), method = cv.getUint16(p + 10, true);
+      var csize = cv.getUint32(p + 20, true), usize = cv.getUint32(p + 24, true);
+      var nl = cv.getUint16(p + 28, true), el = cv.getUint16(p + 30, true), cl = cv.getUint16(p + 32, true);
+      var lho = cv.getUint32(p + 42, true);
+      var name = utf8.decode(cd.subarray(p + 46, p + 46 + nl));
+      var ex = p + 46 + nl, exEnd = ex + el;
+      while (ex + 4 <= exEnd) {
+        var id = cv.getUint16(ex, true), sz = cv.getUint16(ex + 2, true), q = ex + 4;
+        if (id === 1) {
+          if (usize === 0xFFFFFFFF) { usize = Number(cv.getBigUint64(q, true)); q += 8; }
+          if (csize === 0xFFFFFFFF) { csize = Number(cv.getBigUint64(q, true)); q += 8; }
+          if (lho === 0xFFFFFFFF) { lho = Number(cv.getBigUint64(q, true)); q += 8; }
+        }
+        ex += 4 + sz;
+      }
+      p = exEnd + cl;
+      if (name.endsWith("/")) continue;
+      out.push(zipEntry(blob, name, method, flags, csize, usize, lho));
+    }
+    return out;
+  }
+
+  function zipEntry(blob, name, method, flags, csize, usize, lho) {
+    var dataStart = null, inflated = null;
+    async function start() {
+      if (dataStart === null) {
+        var h = new Uint8Array(await blob.slice(lho, lho + 30).arrayBuffer()), hv = dv(h);
+        dataStart = lho + 30 + hv.getUint16(26, true) + hv.getUint16(28, true);
+      }
+      return dataStart;
+    }
+    return { path: name, size: usize, read: async function (off, len) {
+      if (flags & 1) throw new Error(name + " is encrypted inside the zip.");
+      var s = await start();
+      if (method === 0) {
+        return new Uint8Array(await blob.slice(s + off, s + Math.min(off + len, usize)).arrayBuffer());
+      }
+      if (method !== 8) throw new Error(name + ": unsupported zip compression method " + method);
+      if (!inflated) {
+        // Inflate once into a Blob (browsers may keep large Blobs on disk), then slice it.
+        var stream = blob.slice(s, s + csize).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+        inflated = new Response(stream).blob();
+      }
+      var b = await inflated;
+      return new Uint8Array(await b.slice(off, off + len).arrayBuffer());
+    } };
+  }
+
+  /* ---------- Mach-O ---------- */
+  var CPU = { 0x01000007: "x86_64", 0x0100000C: "arm64", 0x0200000C: "arm64_32", 7: "i386", 12: "arm" };
+  var PLAT = { 1: "macOS", 2: "iOS", 3: "tvOS", 4: "watchOS", 5: "bridgeOS", 6: "macCatalyst", 7: "iOSSimulator",
+    8: "tvOSSimulator", 9: "watchOSSimulator", 10: "driverKit", 11: "visionOS" };
+  var FT = { 1: "object", 2: "execute", 6: "dylib", 8: "bundle", 7: "dylinker" };
+  var LC = { SYMTAB: 0x2, DYSYMTAB: 0xB, LOAD_DYLIB: 0xC, ID_DYLIB: 0xD, LOAD_WEAK_DYLIB: 0x80000018,
+    RPATH: 0x8000001C, REEXPORT_DYLIB: 0x8000001F, LAZY_LOAD_DYLIB: 0x20, LOAD_UPWARD_DYLIB: 0x80000023,
+    CODE_SIGNATURE: 0x1D, VERSION_MIN_MACOSX: 0x24, VERSION_MIN_IPHONEOS: 0x25, ENCRYPTION_INFO_64: 0x2C,
+    BUILD_VERSION: 0x32, DYLD_CHAINED_FIXUPS: 0x80000034 };
+  var DYLIB_CMDS = {}; DYLIB_CMDS[LC.LOAD_DYLIB] = "load"; DYLIB_CMDS[LC.LOAD_WEAK_DYLIB] = "weak";
+  DYLIB_CMDS[LC.REEXPORT_DYLIB] = "reexport"; DYLIB_CMDS[LC.LAZY_LOAD_DYLIB] = "lazy"; DYLIB_CMDS[LC.LOAD_UPWARD_DYLIB] = "upward";
+  var MAC_ONLY_LIBS = { AppKit: "missing", Cocoa: "missing", Carbon: "missing", ApplicationServices: "missing",
+    OpenGL: "missing", AGL: "missing", ForceFeedback: "missing", DiskArbitration: "missing", IOBluetooth: "missing",
+    CoreWLAN: "missing", Quartz: "missing", ScreenCaptureKit: "missing", SystemExtensions: "missing",
+    IOKit: "private", CoreServices: "private" };
+
+  function fmtVersion(v) { return (v >>> 16) + "." + ((v >>> 8) & 0xff) + "." + (v & 0xff); }
+  function libShortName(p) { var m = p.match(/\/([^/]+)\.framework\//); return m ? m[1] : p.split("/").pop(); }
+
+  function mkSlice(cpu, sub, off, sz) {
+    cpu = cpu >>> 0; sub = sub >>> 0;
+    var arch = CPU[cpu] || ("0x" + cpu.toString(16));
+    if (arch === "arm64" && (sub & 0xff) === 2) arch = "arm64e";
+    return { arch: arch, cputype: cpu, cpusubtype: sub, offset: off, size: sz };
+  }
+
+  async function machoSlices(e) {
+    var h = await e.read(0, 8); if (h.length < 8) return [];
+    var v = dv(h), be = v.getUint32(0, false);
+    if (be === 0xCAFEBABE || be === 0xCAFEBABF) {
+      var is64 = be === 0xCAFEBABF, n = v.getUint32(4, false);
+      if (n === 0 || n > 32) return [];
+      var ent = is64 ? 32 : 20, t = await e.read(8, n * ent), tv = dv(t), out = [];
+      for (var i = 0; i < n; i++) {
+        var b = i * ent;
+        out.push(is64
+          ? mkSlice(tv.getInt32(b, false), tv.getInt32(b + 4, false), Number(tv.getBigUint64(b + 8, false)), Number(tv.getBigUint64(b + 16, false)))
+          : mkSlice(tv.getInt32(b, false), tv.getInt32(b + 4, false), tv.getUint32(b + 8, false), tv.getUint32(b + 12, false)));
+      }
+      return out;
+    }
+    var le = v.getUint32(0, true);
+    if (le === 0xFEEDFACF || le === 0xFEEDFACE) {
+      var s = await e.read(8, 4);
+      return [mkSlice(v.getInt32(4, true), dv(s).getInt32(0, true), 0, e.size)];
+    }
+    return [];
+  }
+
+  async function parseSlice(e, base, wantSymbols) {
+    var hdr = dv(await e.read(base, 32));
+    if (hdr.getUint32(0, true) !== 0xFEEDFACF) return { error: "not a 64-bit Mach-O slice" };
+    var ftype = hdr.getUint32(12, true), ncmds = hdr.getUint32(16, true), sizeofcmds = hdr.getUint32(20, true);
+    var cmds = await e.read(base + 32, sizeofcmds), cv = dv(cmds);
+    var info = { filetype: FT[ftype] || ftype, platform: null, minos: null, sdk: null, id: null, dylibs: [], rpaths: [],
+      encrypted: false, code_signature: false, chained_fixups: false };
+    var symtab = null, dysym = null, p = 0;
+    for (var i = 0; i < ncmds; i++) {
+      var cmd = cv.getUint32(p, true), size = cv.getUint32(p + 4, true);
+      if (cmd === LC.BUILD_VERSION) {
+        var pl = cv.getUint32(p + 8, true);
+        info.platform = PLAT[pl] || pl; info.minos = fmtVersion(cv.getUint32(p + 12, true)); info.sdk = fmtVersion(cv.getUint32(p + 16, true));
+      } else if (cmd === LC.VERSION_MIN_MACOSX || cmd === LC.VERSION_MIN_IPHONEOS) {
+        info.platform = cmd === LC.VERSION_MIN_MACOSX ? "macOS" : "iOS";
+        info.minos = fmtVersion(cv.getUint32(p + 8, true)); info.sdk = fmtVersion(cv.getUint32(p + 12, true));
+      } else if (DYLIB_CMDS[cmd] || cmd === LC.ID_DYLIB) {
+        var nm = cstr(cmds.subarray(p, p + size), cv.getUint32(p + 8, true));
+        if (cmd === LC.ID_DYLIB) info.id = nm; else info.dylibs.push({ path: nm, kind: DYLIB_CMDS[cmd] });
+      } else if (cmd === LC.RPATH) {
+        info.rpaths.push(cstr(cmds.subarray(p, p + size), cv.getUint32(p + 8, true)));
+      } else if (cmd === LC.ENCRYPTION_INFO_64) {
+        info.encrypted = cv.getUint32(p + 16, true) !== 0;
+      } else if (cmd === LC.CODE_SIGNATURE) {
+        info.code_signature = true;
+      } else if (cmd === LC.DYLD_CHAINED_FIXUPS) {
+        info.chained_fixups = true;
+      } else if (cmd === LC.SYMTAB) {
+        symtab = [cv.getUint32(p + 8, true), cv.getUint32(p + 12, true), cv.getUint32(p + 16, true), cv.getUint32(p + 20, true)];
+      } else if (cmd === LC.DYSYMTAB) {
+        dysym = []; for (var k = 0; k < 6; k++) dysym.push(cv.getUint32(p + 8 + 4 * k, true));
+      }
+      p += size;
+    }
+    if (wantSymbols && symtab) Object.assign(info, await symbols(e, base, symtab, dysym, info.dylibs));
+    return info;
+  }
+
+  async function symbols(e, base, symtab, dysym, dylibs) {
+    var symoff = symtab[0], nsyms = symtab[1], stroff = symtab[2], strsize = symtab[3];
+    var iext = 0, next = nsyms, iundef = 0, nundef = nsyms;
+    if (dysym) { iext = dysym[2]; next = dysym[3]; iundef = dysym[4]; nundef = dysym[5]; }
+    var lo = Math.min(iext, iundef), hi = Math.max(iext + next, iundef + nundef);
+    var raw = await e.read(base + symoff + lo * 16, (hi - lo) * 16), rv = dv(raw);
+    var strtab = await e.read(base + stroff, strsize);
+    var exports = [], imports = {}, weak = [];
+    for (var idx = lo; idx < hi; idx++) {
+      var o = (idx - lo) * 16;
+      var strx = rv.getUint32(o, true), ntype = rv.getUint8(o + 4), ndesc = rv.getUint16(o + 6, true);
+      if (ntype & 0xE0) continue;
+      if (!(ntype & 0x01)) continue;
+      var name = cstr(strtab, strx);
+      if ((ntype & 0x0E) === 0) {
+        var ord = (ndesc >> 8) & 0xFF, lib;
+        if (ord >= 1 && ord <= dylibs.length) lib = dylibs[ord - 1].path;
+        else if (ord === 0xFE) lib = "<dynamic lookup>";
+        else lib = "<flat/self>";
+        (imports[lib] = imports[lib] || []).push(name);
+        if (ndesc & 0x40) weak.push(name);
+      } else if ((ntype & 0x0E) === 0x0E) {
+        exports.push(name);
+      }
+    }
+    Object.keys(imports).forEach(function (k) { imports[k].sort(); });
+    return { exports_count: exports.length,
+      il2cpp_exports: exports.filter(function (n) { return n.indexOf("_il2cpp_") === 0; }).sort(),
+      imports: imports, weak_imports: weak.sort() };
+  }
+
+  async function inspectMacho(e, wantSymbols) {
+    var slices = await machoSlices(e), out = { path: e.path, slices: [] };
+    for (var i = 0; i < slices.length; i++) {
+      var s = Object.assign({}, slices[i]);
+      if (s.arch === "arm64" || s.arch === "arm64e" || s.arch === "x86_64")
+        Object.assign(s, await parseSlice(e, s.offset, wantSymbols && s.arch === "arm64"));
+      out.slices.push(s);
+    }
+    return out;
+  }
+
+  /* ---------- Unity data ---------- */
+  var BUILD_TARGETS = { 2: "StandaloneOSX", 4: "StandaloneOSXIntel", 5: "StandaloneWindows", 9: "iOS", 13: "Android",
+    19: "StandaloneWindows64", 20: "WebGL", 21: "WSAPlayer", 24: "StandaloneLinux64", 27: "StandaloneOSXIntel64",
+    31: "PS4", 33: "XboxOne", 37: "tvOS", 38: "Switch", 44: "PS5" };
+  var VERSION_RE = /(20[1-9][0-9]|[56])\.[0-9]{1,2}\.[0-9]{1,3}[abfpx][0-9]{1,3}/g;
+  var MD_HINTS = { 16: "Unity 5.3-5.4", 19: "Unity 5.5", 20: "Unity 5.6", 21: "Unity 2017.1", 22: "Unity 2017.x",
+    23: "Unity 2017.x-2018.2", 24: "Unity 2018.3-2020.1", 27: "Unity 2020.2-2021.1", 29: "Unity 2021.2-2022.3",
+    31: "Unity 2022.3 (late)/2023.x" };
+
+  function parseSerializedHeader(h) {
+    if (h.length < 48) return null;
+    var v = dv(h), version = v.getUint32(8, false);
+    if (version < 9 || version > 64) return null;
+    var endian = h[16], pos = 20;
+    if (version >= 22) pos += 28;
+    var end = h.indexOf(0, pos); if (end < 0) return null;
+    var uv = new TextDecoder("latin1").decode(h.subarray(pos, end));
+    if (!/^\d+\.\d+/.test(uv)) return null;
+    pos = end + 1;
+    var target = null;
+    if (pos + 4 <= h.length) target = v.getInt32(pos, endian === 0);
+    return { format: "SerializedFile", serialized_version: version, unity_version: uv, target_platform: target,
+      target_platform_name: BUILD_TARGETS[target] || String(target) };
+  }
+
+  function parseUnityFS(h) {
+    var sigs = ["UnityFS", "UnityRaw", "UnityWeb"];
+    for (var i = 0; i < sigs.length; i++) {
+      var s = sigs[i], ok = h.length > s.length + 4;
+      for (var k = 0; ok && k < s.length; k++) if (h[k] !== s.charCodeAt(k)) ok = false;
+      if (!ok || h[s.length] !== 0) continue;
+      var p = s.length + 1 + 4, a = h.indexOf(0, p); if (a < 0) continue;
+      var b = h.indexOf(0, a + 1); if (b < 0) continue;
+      return { format: s, unity_version: new TextDecoder("latin1").decode(h.subarray(a + 1, b)),
+        target_platform: null, target_platform_name: null };
+    }
+    return null;
+  }
+
+  function parseMetadata(h) {
+    if (h.length < 8) return { magic_ok: false };
+    var v = dv(h), ok = v.getUint32(0, true) === 0xFAB11BAF, ver = v.getInt32(4, true);
+    return { magic_ok: ok, version: ok ? ver : null, unity_range_hint: ok ? (MD_HINTS[ver] || "newer/unknown") : null };
+  }
+
+  async function scanForVersion(e, limit) {
+    limit = limit || 96 * 1024 * 1024;
+    var chunk = 4 * 1024 * 1024, counts = {}, dec = new TextDecoder("latin1");
+    for (var off = 0; off < Math.min(e.size, limit); off += chunk) {
+      var s = dec.decode(await e.read(off, chunk + 32)), m;
+      VERSION_RE.lastIndex = 0;
+      while ((m = VERSION_RE.exec(s))) counts[m[0]] = (counts[m[0]] || 0) + 1;
+    }
+    var best = null; for (var k in counts) if (best === null || counts[k] > counts[best]) best = k;
+    return best;
+  }
+
+  function parsePlist(u8) {
+    var text = utf8.decode(u8);
+    if (text.indexOf("bplist00") === 0) throw new Error("binary plist (convert to XML or skip)");
+    var out = {}, re = /<key>([^<]+)<\/key>\s*<string>([^<]*)<\/string>/g, m;
+    while ((m = re.exec(text))) out[m[1]] = m[2].replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
+    return out;
+  }
+
+  /* ---------- locate ---------- */
+  var DATA_PRIORITY = ["globalgamemanagers", "data.unity3d", "mainData", "level0", "sharedassets0.assets", "resources.assets"];
+  var PLUGIN_NOTES = [
+    [/steam_api|steamworks/, "Steamworks. If the game refuses to start without Steam this is a hard blocker; optional Steam features (achievements) can be stubbed."],
+    [/fmod/, "FMOD native audio. Needs the iOS FMOD build of the same version."],
+    [/wwise|aksoundengine/, "Wwise native audio. Needs the iOS Wwise build of the same version."],
+    [/rewired/, "Rewired input native helper. Rewired falls back to Unity input on iOS."],
+    [/discord/, "Discord RPC. Safe to stub."],
+    [/galaxy/, "GOG Galaxy SDK. Safe to stub if optional."],
+    [/eos|epic/, "Epic Online Services. Safe to stub if optional."]];
+  function pluginNote(p) {
+    var low = p.toLowerCase();
+    for (var i = 0; i < PLUGIN_NOTES.length; i++) if (PLUGIN_NOTES[i][0].test(low)) return PLUGIN_NOTES[i][1];
+    return "Unknown native plugin. Needs an iOS arm64 build, a re-targeted copy, or a stub.";
+  }
+
+  function locate(entries) {
+    var byBase = {}, byPath = {};
+    entries.forEach(function (e) {
+      if (e.path.indexOf("__MACOSX/") >= 0) return;
+      byPath[e.path] = e;
+      var b = e.path.split("/").pop(); (byBase[b] = byBase[b] || []).push(e.path);
+    });
+    function first(n) { var c = byBase[n]; return c ? c.slice().sort(function (a, b) { return a.length - b.length; })[0] : null; }
+    var f = { plugins: [], data_candidates: [] };
+    f.game_assembly = first("GameAssembly.dylib"); f.unity_player = first("UnityPlayer.dylib");
+    f.metadata = first("global-metadata.dat"); f.assembly_csharp = first("Assembly-CSharp.dll");
+    f.mono_runtime = Object.keys(byPath).find(function (p) { return p.indexOf("/MonoBleedingEdge/") >= 0 || p.endsWith("libmonobdwgc-2.0.dylib"); }) || null;
+    DATA_PRIORITY.forEach(function (n) { if (first(n)) f.data_candidates.push(first(n)); });
+    var plists = (byBase["Info.plist"] || []).filter(function (p) { return p.endsWith("Contents/Info.plist") && p.indexOf(".bundle/") < 0 && p.indexOf("Frameworks/") < 0; });
+    var loose = byBase["Info.plist"] || [];
+    var byLen = function (a, b) { return a.length - b.length; };
+    f.info_plist = plists.length ? plists.sort(byLen)[0] : (loose.length ? loose.slice().sort(byLen)[0] : null);
+    Object.keys(byPath).forEach(function (p) {
+      var low = "/" + p.toLowerCase();
+      if (low.indexOf("/plugins/") >= 0 && (low.indexOf(".bundle/contents/macos/") >= 0 || low.endsWith(".dylib"))) f.plugins.push(p);
+    });
+    // Loose files picked one by one carry no folder names: treat any Mach-O that
+    // is not one of the known Unity binaries as a plugin candidate only if named like one.
+    return { found: f, byPath: byPath };
+  }
+
+  /* ---------- report ---------- */
+  function arm64Slice(b) { return b ? (b.slices.find(function (s) { return s.arch === "arm64"; }) || null) : null; }
+
+  async function buildReport(entries, label) {
+    var L = locate(entries), loc = L.found, E = function (p) { return L.byPath[p]; };
+    var rep = { tool: "unity-inspect", schema: SCHEMA, input: label, game: {}, unity: {}, backend: "unknown",
+      il2cpp: null, binaries: {}, plugins: [], findings: [], located: loc };
+    var add = function (level, id, message) { rep.findings.push({ level: level, id: id, message: message }); };
+
+    if (loc.info_plist) {
+      try {
+        var e = E(loc.info_plist), pl = parsePlist(await e.read(0, e.size));
+        rep.game = { name: pl.CFBundleName || pl.CFBundleExecutable || null, bundle_id: pl.CFBundleIdentifier || null,
+          version: pl.CFBundleShortVersionString || null, executable: pl.CFBundleExecutable || null,
+          min_macos: pl.LSMinimumSystemVersion || null };
+        if (pl.UnityBuildNumber) rep.unity.changeset = pl.UnityBuildNumber;
+      } catch (err) { add("info", "plist-unreadable", "Could not parse " + loc.info_plist + ": " + err.message); }
+    }
+
+    for (var i = 0; i < loc.data_candidates.length; i++) {
+      var c = loc.data_candidates[i], head = await E(c).read(0, 512);
+      var hdr = parseUnityFS(head) || parseSerializedHeader(head);
+      if (hdr && hdr.unity_version && hdr.unity_version.indexOf("0.0") !== 0) {
+        Object.assign(rep.unity, { version: hdr.unity_version, source: c, target_platform: hdr.target_platform,
+          target_platform_name: hdr.target_platform_name, container: hdr.format, serialized_version: hdr.serialized_version || null });
+        break;
+      }
+    }
+    if (!rep.unity.version) {
+      var cands = [loc.unity_player, loc.game_assembly];
+      for (var j = 0; j < cands.length; j++) if (cands[j]) {
+        var v = await scanForVersion(E(cands[j]));
+        if (v) { rep.unity.version = v; rep.unity.source = cands[j] + " (string scan)"; break; }
+      }
+    }
+
+    if (loc.game_assembly || loc.metadata) rep.backend = "il2cpp";
+    else if (loc.assembly_csharp || loc.mono_runtime) rep.backend = "mono";
+    if (loc.metadata) rep.il2cpp = parseMetadata(await E(loc.metadata).read(0, 8));
+
+    if (loc.game_assembly) rep.binaries["GameAssembly.dylib"] = await inspectMacho(E(loc.game_assembly), true);
+    if (loc.unity_player) rep.binaries["UnityPlayer.dylib"] = await inspectMacho(E(loc.unity_player), false);
+    for (var k = 0; k < loc.plugins.length; k++) {
+      var b = await inspectMacho(E(loc.plugins[k]), false);
+      rep.plugins.push({ path: loc.plugins[k], archs: b.slices.map(function (s) { return s.arch; }), note: pluginNote(loc.plugins[k]) });
+    }
+    findings(rep, add);
+    return rep;
+  }
+
+  function findings(r, add) {
+    var u = r.unity;
+    if (u.version) {
+      add("ok", "unity-version", "Unity " + u.version + " (from " + u.source + ")" + (u.changeset ? ", changeset " + u.changeset : ""));
+      if (u.target_platform_name) add("info", "data-target", "Data was built for " + u.target_platform_name + ". The iOS player will be " +
+        "loading data that it did not build; this is the main thing Phase 0 must prove works.");
+      if (parseInt(u.version, 10) < 2019) add("warn", "old-unity", "Unity older than 2019.3 has no separate UnityPlayer.dylib and its " +
+        "iOS toolchain may not build with current Xcode on GitHub runners.");
+    } else {
+      add("blocker", "unity-version", "Could not determine the Unity version. Add globalgamemanagers (or level0 / data.unity3d) from Contents/Resources/Data.");
+    }
+    if (r.backend === "mono") add("blocker", "backend-mono", "This is a Mono build, not IL2CPP. There is no GameAssembly.dylib to load; " +
+      "Mono needs a JIT and a different loader design. Not supported by this pipeline.");
+    else if (r.backend === "unknown") add("warn", "backend-unknown", "Could not tell IL2CPP from Mono. Include GameAssembly.dylib and global-metadata.dat.");
+
+    var md = r.il2cpp;
+    if (md) {
+      if (md.magic_ok) add("ok", "metadata", "global-metadata.dat version " + md.version + " (" + md.unity_range_hint + ").");
+      else add("warn", "metadata-obfuscated", "global-metadata.dat has a non-standard header (encrypted or obfuscated). The game's own " +
+        "GameAssembly decrypts it, so loading may still work, but tooling that reads metadata will not.");
+    } else if (r.backend === "il2cpp") {
+      add("warn", "metadata-missing", "global-metadata.dat not found (expected under Contents/Resources/Data/il2cpp_data/Metadata/).");
+    }
+
+    var ga = r.binaries["GameAssembly.dylib"];
+    if (r.backend === "il2cpp" && !ga) add("blocker", "gameassembly-missing", "GameAssembly.dylib not found (expected in Contents/Frameworks/).");
+    if (ga) {
+      var archs = ga.slices.map(function (s) { return s.arch; }), s = arm64Slice(ga);
+      if (!archs.length) add("blocker", "gameassembly-format", "GameAssembly.dylib is not a Mach-O file.");
+      else if (!s) add("blocker", "gameassembly-arch", "GameAssembly.dylib has no arm64 slice (" + archs.join(", ") + "). An x86_64-only game cannot run on the iPad's A14.");
+      else {
+        add("ok", "gameassembly-arch", "GameAssembly.dylib slices: " + archs.join(", ") + "; arm64 slice targets " + s.platform + " " + s.minos + " (SDK " + s.sdk + ").");
+        if (s.encrypted) add("blocker", "gameassembly-encrypted", "arm64 slice is FairPlay-encrypted.");
+        var n = (s.il2cpp_exports || []).length;
+        if (n) add("ok", "il2cpp-api", n + " il2cpp_* API functions exported (the loader forwards to these).");
+        else add("warn", "il2cpp-api", "No il2cpp_* exports found in the symbol table.");
+        (s.dylibs || []).forEach(function (d) {
+          var short = libShortName(d.path), kind = MAC_ONLY_LIBS[short];
+          if (kind === "missing") add(d.kind === "weak" ? "warn" : "blocker", "dep-" + short, "GameAssembly links " + short +
+            " which does not exist on iPadOS (" + d.kind + " link). A shim library with that install name is required.");
+          else if (kind === "private") add("info", "dep-" + short, "GameAssembly links " + short + ": present on iPadOS but not in the public SDK; run the CI symbol check to confirm each symbol.");
+        });
+      }
+    }
+    var up = r.binaries["UnityPlayer.dylib"];
+    if (up) add("info", "unityplayer", "UnityPlayer.dylib slices: " + up.slices.map(function (s) { return s.arch; }).join(", ") +
+      ". It is NOT used on the iPad (the iOS engine replaces it); only relevant for the zorrobyte-style fallback.");
+    r.plugins.forEach(function (p) {
+      add(p.archs.indexOf("arm64") >= 0 ? "warn" : "blocker", "plugin", "Native plugin " + p.path + " (" + (p.archs.join(", ") || "not Mach-O") + "): " + p.note);
+    });
+  }
+
+  return { filesToEntries: filesToEntries, blobEntry: blobEntry, zipEntries: zipEntries, buildReport: buildReport,
+    arm64Slice: arm64Slice, parseSerializedHeader: parseSerializedHeader, parseMetadata: parseMetadata };
+})();
+if (typeof module !== "undefined") module.exports = InspectorCore;
+</script>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var LABEL = { ok: "OK", info: "Info", warn: "Check", blocker: "Blocker" };
+  var current = null;
+
+  // Shown until the viewer picks files. Values come from a synthetic test build, not a real game.
+  var EXAMPLE = {
+    tool: "unity-inspect", schema: 1, input: "example",
+    game: { name: "Example Game", bundle_id: "com.example.game", version: "1.0.4", executable: "Example Game", min_macos: "11.0" },
+    unity: { version: "2021.3.16f1", source: "Example Game.app/Contents/Resources/Data/globalgamemanagers", target_platform: 2, target_platform_name: "StandaloneOSX" },
+    backend: "il2cpp", il2cpp: { magic_ok: true, version: 29, unity_range_hint: "Unity 2021.2-2022.3" },
+    binaries: { "GameAssembly.dylib": { path: "Example Game.app/Contents/Frameworks/GameAssembly.dylib", slices: [
+      { arch: "x86_64" },
+      { arch: "arm64", platform: "macOS", minos: "11.0.0", sdk: "13.1.0",
+        dylibs: [{ path: "/usr/lib/libSystem.B.dylib", kind: "load" }, { path: "/usr/lib/libc++.1.dylib", kind: "load" },
+          { path: "/System/Library/Frameworks/Foundation.framework/Versions/C/Foundation", kind: "load" }],
+        imports: { "/usr/lib/libSystem.B.dylib": new Array(412), "/usr/lib/libc++.1.dylib": new Array(96),
+          "/System/Library/Frameworks/Foundation.framework/Versions/C/Foundation": new Array(7) },
+        il2cpp_exports: new Array(231) }] } },
+    plugins: [{ path: "Example Game.app/Contents/PlugIns/steam_api.bundle/Contents/MacOS/libsteam_api.dylib", archs: ["x86_64", "arm64"] }],
+    findings: [
+      { level: "ok", id: "unity-version", message: "Unity 2021.3.16f1 (from Example Game.app/Contents/Resources/Data/globalgamemanagers)" },
+      { level: "info", id: "data-target", message: "Data was built for StandaloneOSX. The iOS player will be loading data that it did not build; this is the main thing Phase 0 must prove works." },
+      { level: "ok", id: "metadata", message: "global-metadata.dat version 29 (Unity 2021.2-2022.3)." },
+      { level: "ok", id: "gameassembly-arch", message: "GameAssembly.dylib slices: x86_64, arm64; arm64 slice targets macOS 11.0.0 (SDK 13.1.0)." },
+      { level: "ok", id: "il2cpp-api", message: "231 il2cpp_* API functions exported (the loader forwards to these)." },
+      { level: "warn", id: "plugin", message: "Native plugin …/steam_api.bundle (x86_64, arm64): Steamworks. If the game refuses to start without Steam this is a hard blocker; optional Steam features (achievements) can be stubbed." }]
+  };
+
+  function cell(tag, text, cls) { var el = document.createElement(tag); el.textContent = text; if (cls) el.className = cls; return el; }
+
+  function render(rep, isExample) {
+    current = isExample ? null : rep;
+    $("example-tag").hidden = !isExample;
+    var ga = rep.binaries["GameAssembly.dylib"], s = InspectorCore.arm64Slice(ga);
+    var rows = [
+      ["Game", (rep.game && rep.game.name) || rep.input],
+      ["Unity", rep.unity.version || "unknown"],
+      ["Backend", rep.backend.toUpperCase()],
+      ["GameAssembly", ga ? ga.slices.map(function (x) { return x.arch; }).join(" + ") : "not found"],
+      ["Metadata", rep.il2cpp ? (rep.il2cpp.magic_ok ? "v" + rep.il2cpp.version : "non-standard") : "not found"],
+      ["Data target", rep.unity.target_platform_name || "unknown"]];
+    var ro = $("readout"); ro.textContent = "";
+    rows.forEach(function (r) { var d = document.createElement("div"); d.append(cell("dt", r[0]), cell("dd", r[1])); ro.append(d); });
+
+    var blockers = rep.findings.filter(function (f) { return f.level === "blocker"; }).length;
+    var v = $("verdict");
+    v.className = "verdict " + (blockers ? "stop" : "go");
+    v.textContent = blockers ? blockers + " blocker" + (blockers > 1 ? "s" : "") + " for the iPad loader. See below."
+      : "Candidate for the iPad loader. Next: send the report for the iPadOS symbol check.";
+
+    var ul = $("findings"); ul.textContent = "";
+    var order = { blocker: 0, warn: 1, info: 2, ok: 3 };
+    rep.findings.slice().sort(function (a, b) { return order[a.level] - order[b.level]; }).forEach(function (f) {
+      var li = document.createElement("li");
+      li.append(cell("span", LABEL[f.level], "chip " + f.level), cell("span", f.message));
+      ul.append(li);
+    });
+
+    var tb = $("libs"); tb.textContent = "";
+    if (s && s.dylibs) s.dylibs.forEach(function (d) {
+      var tr = document.createElement("tr"), n = ((s.imports || {})[d.path] || []).length;
+      tr.append(cell("td", d.path, "mono"), cell("td", d.kind), cell("td", String(n), "num"));
+      tb.append(tr);
+    });
+    else { var tr = document.createElement("tr"), td = cell("td", "No arm64 GameAssembly.dylib inspected yet."); td.colSpan = 3; tr.append(td); tb.append(tr); }
+
+    $("json").value = isExample ? "" : JSON.stringify(rep, null, 1);
+    $("json").placeholder = isExample ? "Your report appears here after you choose files." : "";
+  }
+
+  async function run(entries, label) {
+    $("status").textContent = "Reading " + entries.length + " file" + (entries.length === 1 ? "" : "s") + "…";
+    try {
+      var rep = await InspectorCore.buildReport(entries, label);
+      render(rep, false);
+      $("status").textContent = "Done. Read headers from " + entries.length + " file" + (entries.length === 1 ? "" : "s") + ".";
+    } catch (err) {
+      $("status").textContent = "Could not read the files: " + err.message;
+    }
+  }
+
+  $("pick-files").addEventListener("change", function (e) {
+    if (e.target.files.length) run(InspectorCore.filesToEntries(e.target.files), "selected files");
+  });
+  $("pick-dir").addEventListener("change", function (e) {
+    if (e.target.files.length) run(InspectorCore.filesToEntries(e.target.files), (e.target.files[0].webkitRelativePath || "folder").split("/")[0]);
+  });
+  $("pick-zip").addEventListener("change", async function (e) {
+    var f = e.target.files[0]; if (!f) return;
+    $("status").textContent = "Opening " + f.name + "…";
+    try { run(await InspectorCore.zipEntries(f), f.name); }
+    catch (err) { $("status").textContent = "Could not open the zip: " + err.message; }
+  });
+
+  $("copy").addEventListener("click", function () {
+    var t = $("json");
+    if (!current) { $("copy-status").textContent = "Choose files first."; return; }
+    navigator.clipboard.writeText(t.value).then(function () {
+      $("copy-status").textContent = "Copied " + Math.round(t.value.length / 1024) + " KB.";
+    }, function () {
+      t.focus(); t.select(); $("copy-status").textContent = "Selected. Use your keyboard's Copy.";
+    });
+  });
+  $("download").addEventListener("click", function () {
+    if (!current) { $("copy-status").textContent = "Choose files first."; return; }
+    var name = ((current.game && current.game.name) || "game").replace(/[^A-Za-z0-9._-]+/g, "-") + ".json";
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([$("json").value], { type: "application/json" }));
+    a.download = name; document.body.append(a); a.click(); a.remove();
+    $("copy-status").textContent = "If nothing downloaded, use Copy report instead.";
+  });
+
+  // Downloads only work when the page is opened directly (e.g. GitHub Pages), not inside an embedded viewer.
+  var embedded = true;
+  try { embedded = window.self !== window.top; } catch (e) { embedded = true; }
+  $("download").hidden = embedded;
+
+  render(EXAMPLE, true);
+})();
+</script>
